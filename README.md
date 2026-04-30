@@ -66,7 +66,7 @@ RAG_Projects/
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/rag-projects
+git clone https://github.com/ShauryavirManhas/RAG_Course_Chatbot/
 cd rag-projects
 
 # Create and activate virtual environment
