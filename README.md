@@ -137,4 +137,4 @@ couple retrieval logic to a specific model provider.
 
 Shauryavir Singh Manhas
 MS Information Systems Management, Carnegie Mellon University (Heinz College)
-[smanhas@andrew.cmu.edu](mailto:smanhas@andrew.cmu.edu) · [LinkedIn](https://linkedin.com/in/YOUR_LINKEDIN)
+[LinkedIn](https://www.linkedin.com/in/shaurya-manhas-683492216/)
