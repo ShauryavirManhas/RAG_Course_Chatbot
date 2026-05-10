@@ -6,7 +6,7 @@ from chromadb.utils import embedding_functions
 import PyPDF2
 
 # ── Config ──────────────────────────────────────────────────────────────────
-COLLECTION_NAME = "cmu_docs"
+COLLECTION_NAME = "docs"
 CHUNK_SIZE       = 500   # characters per chunk
 CHUNK_OVERLAP    = 50    # overlap between chunks so context isn't lost at edges
 TOP_K            = 4     # how many chunks to retrieve per query
@@ -16,7 +16,7 @@ MODEL            = "claude-sonnet-4-6"
 # Replace get_clients() with:
 @st.cache_resource
 def get_clients():
-    genai.configure(api_key="<Enter Key Here>")
+    genai.configure(api_key=st.secrets["api_key"])
     gemini_client = genai.GenerativeModel("gemini-flash-latest")
 
     chroma_client = chromadb.PersistentClient(path="./chroma_db")
@@ -83,7 +83,7 @@ def build_prompt(query: str, chunks: list[dict]) -> str:
     context_block = "\n\n---\n\n".join(
         f"[Source: {c['source']}]\n{c['text']}" for c in chunks
     )
-    return f"""You are a helpful study assistant for CMU graduate students.
+    return f"""You are a helpful study assistant for graduate students.
 Answer the question using ONLY the context provided below.
 If the answer isn't in the context, say "I couldn't find that in your uploaded materials."
 Always mention which source document your answer comes from.
@@ -101,8 +101,8 @@ def ask_gemini(query, collection, gemini_client):
 
 # ── Streamlit UI ─────────────────────────────────────────────────────────────
 def main():
-    st.set_page_config(page_title="CMU Course Chatbot", page_icon="📚", layout="wide")
-    st.title("📚 CMU Course PDF Chatbot")
+    st.set_page_config(page_title="Course Chatbot", page_icon="📚", layout="wide")
+    st.title("📚 Course PDF Chatbot")
     st.caption("Upload your lecture slides or notes, then ask questions.")
 
     gemini_client, collection = get_clients()
