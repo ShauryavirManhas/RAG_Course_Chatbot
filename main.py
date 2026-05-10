@@ -102,7 +102,7 @@ def ask_gemini(query, collection, gemini_client):
 
 # ── Streamlit UI ─────────────────────────────────────────────────────────────
 def main():
-    st.set_page_config(page_title="Course Chatbot", page_icon="📚", layout="wide")
+    st.set_page_config(page_title="RAG Course Chatbot", page_icon="📚", layout="wide")
     st.title("📚 Course PDF Chatbot")
     st.caption("Upload your lecture slides or notes, then ask questions.")
 
