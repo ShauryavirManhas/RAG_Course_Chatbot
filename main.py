@@ -1,4 +1,5 @@
 import os
+import uuid
 import streamlit as st
 import google.generativeai as genai
 import chromadb
@@ -6,28 +7,34 @@ from chromadb.utils import embedding_functions
 import PyPDF2
 
 # ── Config ──────────────────────────────────────────────────────────────────
-COLLECTION_NAME = "docs"
-CHUNK_SIZE       = 500   # characters per chunk
-CHUNK_OVERLAP    = 50    # overlap between chunks so context isn't lost at edges
-TOP_K            = 4     # how many chunks to retrieve per query
-MODEL            = "claude-sonnet-4-6"
+CHUNK_SIZE    = 500
+CHUNK_OVERLAP = 50
+TOP_K         = 4
 
-# ── Clients (cached so they don't reload on every Streamlit rerun) ───────────
-# Replace get_clients() with:
-@st.cache_resource
+# ── Per-session client init (NOT cached globally) ────────────────────────────
 def get_clients():
-    genai.configure(api_key=st.secrets["api_key"])
-    gemini_client = genai.GenerativeModel("gemini-flash-latest")
+    # Session ID — unique per browser tab/session
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
 
-    chroma_client = chromadb.PersistentClient(path="./chroma_db")
-    embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="all-MiniLM-L6-v2"
-    )
-    collection = chroma_client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        embedding_function=embed_fn
-    )
-    return gemini_client, collection
+    if "collection" not in st.session_state:
+        genai.configure(api_key=st.secrets["api_key"])
+
+        embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="all-MiniLM-L6-v2"
+        )
+        # EphemeralClient = in-memory only, never written to disk
+        chroma_client = chromadb.EphemeralClient()
+        st.session_state.collection = chroma_client.create_collection(
+            name=f"user_{st.session_state.session_id}",
+            embedding_function=embed_fn
+        )
+
+    if "gemini_client" not in st.session_state:
+        genai.configure(api_key=st.secrets["api_key"])
+        st.session_state.gemini_client = genai.GenerativeModel("gemini-flash-latest")
+
+    return st.session_state.gemini_client, st.session_state.collection
 
 
 # ── PDF → chunks ─────────────────────────────────────────────────────────────
@@ -39,7 +46,6 @@ def extract_text_from_pdf(uploaded_file) -> str:
     return text
 
 def chunk_text(text: str, source_name: str) -> list[dict]:
-    """Split text into overlapping chunks with metadata."""
     chunks = []
     start = 0
     chunk_id = 0
@@ -57,11 +63,8 @@ def chunk_text(text: str, source_name: str) -> list[dict]:
     return chunks
 
 def index_pdf(uploaded_file, collection) -> int:
-    """Extract, chunk, and store a PDF in ChromaDB. Returns chunk count."""
     text   = extract_text_from_pdf(uploaded_file)
     chunks = chunk_text(text, uploaded_file.name)
-
-    # ChromaDB upsert: if same ID exists it updates, so re-uploading is safe
     collection.upsert(
         ids       = [c["id"]   for c in chunks],
         documents = [c["text"] for c in chunks],
@@ -71,9 +74,7 @@ def index_pdf(uploaded_file, collection) -> int:
 
 # ── Retrieval + generation ───────────────────────────────────────────────────
 def retrieve(query: str, collection) -> list[dict]:
-    """Find the TOP_K most relevant chunks for a query."""
     results = collection.query(query_texts=[query], n_results=TOP_K)
-    print(results)
     chunks  = []
     for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
         chunks.append({"text": doc, "source": meta["source"]})
@@ -94,8 +95,8 @@ CONTEXT:
 QUESTION: {query}"""
 
 def ask_gemini(query, collection, gemini_client):
-    chunks  = retrieve(query, collection)
-    prompt  = build_prompt(query, chunks)
+    chunks   = retrieve(query, collection)
+    prompt   = build_prompt(query, chunks)
     response = gemini_client.generate_content(prompt)
     return response.text, chunks
 
@@ -107,7 +108,6 @@ def main():
 
     gemini_client, collection = get_clients()
 
-    # Sidebar: upload PDFs
     with st.sidebar:
         st.header("Upload Course Materials")
         uploaded_files = st.file_uploader(
@@ -123,15 +123,15 @@ def main():
                         n = index_pdf(f, collection)
                     st.success(f"✓ {f.name} — {n} chunks indexed")
 
-        # Show what's already indexed
         total = collection.count()
         st.divider()
         st.metric("Chunks in database", total)
         if st.button("Clear database"):
-            collection.delete(where={"source": {"$ne": ""}})
+            # Delete the collection and reset session state
+            st.session_state.pop("collection", None)
+            st.session_state.pop("session_id", None)
             st.rerun()
 
-    # Main: chat interface
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
